@@ -1,0 +1,603 @@
+---
+title: "Interpolation of biodiversity change in global mammals at Holocene time scale"
+author: "Petr Keil"
+date: "Sept 17, 2021"
+output: 
+  html_document: 
+    highlight: pygments
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load and import data and other objects
+
+```{r, message=FALSE, warning=FALSE}
+rm(list = ls())
+set.seed(1234)
+
+source("functions_settings_libraries.r")
+load(file = "mammals_20kg_processed.RData")
+
+# limits for plots showing observed vs predicted values of change
+lims.delta <- c(-60, 15)
+
+objects()
+```
+
+## Log Ratios (LR) of species richness change
+
+```{r}
+CNTR@data <- data.frame(CNTR@data, 
+                        LR = log10(CNTR@data$S.curr / CNTR@data$S.natu))
+
+HEX@data <- data.frame(HEX@data, 
+                        LR = log10(HEX@data$S.curr / HEX@data$S.natu))
+
+```
+
+## Plot the raw data
+
+"Fortify" `sp` objects so that they are suitable for ggplot2.
+
+```{r, warning = FALSE}
+  CNTR.fort <- fortify(CNTR, region = "LEVEL3_NAM") %>%
+               left_join(y = CNTR@data, by = c("id" = "LEVEL3_NAM"))
+
+  HEX.fort <- fortify(HEX, region = "id") %>%
+              left_join(y = HEX@data, by = "id")
+  
+  LAND.fort <- fortify(LAND)
+```
+
+Observed *true* species numbers in countries:
+
+```{r, fig.width = 10, fig.height = 7, eval = TRUE}
+  pCNTR.S1 <-ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.natu)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Past S") +
+             scale_fill_viridis(option = "magma", limits = c()) 
+  pCNTR.S2 <-ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.curr)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Current S") +
+             scale_fill_viridis(option = "magma") 
+  pCNTR.ga <-ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.gain)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Gain") +
+             scale_fill_viridis(option = "magma") 
+  pCNTR.lo <-ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.loss)) + blank.theme +
+                 geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Loss") +
+             scale_fill_viridis(option = "magma") 
+  pCNTR.de <-ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "S change") +
+             scale_fill_viridis(option = "magma", limits = lims.delta) 
+
+  grid.arrange(pCNTR.S1, pCNTR.S2, pCNTR.ga, pCNTR.lo, pCNTR.de, ncol = 2, nrow = 3)
+```
+
+Countries sampled in time 1 or time 2:
+
+```{r, eval = TRUE}
+pCNTR.smp <- ggplot(CNTR.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = time.sampled), colour = "black") + blank.theme +
+             coord_fixed() + labs() +
+             scale_fill_grey() 
+pCNTR.smp
+```
+
+Observed *true* species numbers in hexagons:
+
+```{r, fig.width = 10, fig.height = 7, eval=TRUE}
+  pHEX.S1 <- ggplot(HEX.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.natu)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Past S") +
+             scale_fill_viridis(option = "magma", limits = c()) 
+  pHEX.S2 <- ggplot(HEX.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.curr)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                                    fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Current S") +
+             scale_fill_viridis(option = "magma") 
+  pHEX.ga <- ggplot(HEX.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.gain)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Gain") +
+             scale_fill_viridis(option = "magma") 
+  pHEX.lo <- ggplot(HEX.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.loss)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "Loss") +
+             scale_fill_viridis(option = "magma") 
+  pHEX.de <- ggplot(HEX.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + labs(subtitle = "S change") +
+             scale_fill_viridis(option = "magma", limits = lims.delta) 
+
+  grid.arrange(pHEX.S1, pHEX.S2, pHEX.ga, pHEX.lo, pHEX.de, ncol = 2, nrow = 3)
+```
+
+
+# Interpolation using the SAR method
+
+## Fit boosted trees
+
+```{r}
+NTREES <- 1000
+SAR.gbm <- gbm(S ~ Lon + Lat + Area.km + time, 
+                       data = CNTR.sub, 
+                       interaction.depth = 10,
+                       distribution = "poisson",
+                       n.minobsinnode = 3,
+                       n.trees = NTREES)
+```
+
+## Predict to countries (SAR method)
+
+```{r}
+preds <- data.frame(CNTR.L, 
+                    S.pred = predict(SAR.gbm, newdata = CNTR.L,
+                                     n.trees = NTREES, type = "response"))
+
+pred.wide <- reshape(data = preds,
+                     idvar = "LEVEL3_NAM",
+                     v.names = c("S", "S.pred"),
+                     timevar = "time",
+                     direction = "wide") %>% select(LEVEL3_NAM, 
+                                                    S.pred.2, 
+                                                    S.pred.1,
+                                                    S.1,
+                                                    S.2)
+
+pred.wide <- data.frame(pred.wide, 
+                        LR.SAR = log10(pred.wide$S.pred.2 / pred.wide$S.pred.1),
+                        S.delta.SAR = pred.wide$S.pred.2 - pred.wide$S.pred.1)
+
+CNTR.pred <- CNTR
+CNTR.pred@data <- left_join(x = CNTR.pred@data,
+                            y = pred.wide,
+                            by = "LEVEL3_NAM")
+
+# replace Inf values of log ratios by NAs
+CNTR.pred@data$LR[CNTR.pred@data$LR == Inf] <- NA 
+
+# Pearson correlations of observed vs predicted
+delta.cor.cntr.sar <- round(cor(CNTR.pred@data$S.delta, 
+                                CNTR.pred@data$S.delta.SAR, 
+                                use = "complete.obs"), 3)
+delta.cor.cntr.sar
+
+LR.cor.cntr.sar <- round(cor(CNTR.pred@data$LR, 
+                             CNTR.pred@data$LR.SAR, 
+                             use = "complete.obs"), 3)
+LR.cor.cntr.sar
+```
+
+## Plot predicted vs observed in countries (SAR method)
+
+```{r, fig.width=10, fig.height=5, warning=FALSE, message=FALSE}
+SAR.obspred.CNTR.S <- ggplot(data = CNTR.pred@data, aes(x = S.delta, y = S.delta.SAR)) +
+  geom_point(colour="#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlim(-60,16) + ylim(-60,16) +
+  xlab(TeX(r'($\True \; \hat{S}_{\Delta}$)')) + 
+  ylab(TeX(r'($\Predicted \; \hat{S}_{\Delta}$)')) +  
+  labs(subtitle = paste("Pearson cor. = ", delta.cor.cntr.sar)) +
+  theme_bw() 
+
+SAR.obspred.CNTR.LR <- ggplot(data = CNTR.pred@data, aes(x = LR, y = LR.SAR)) +
+  geom_point(colour="#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlim(-1.2, 2) + ylim(-1.2, 2) +
+  xlab("True LR") + ylab("Predicted LR") + 
+  labs(subtitle = paste("Pearson cor. = ", LR.cor.cntr.sar)) +
+  theme_bw() 
+
+grid.arrange(SAR.obspred.CNTR.S, SAR.obspred.CNTR.LR, nrow=1, ncol=2)
+```
+
+## Predict to hexagons (SAR method)
+
+```{r}
+HEX.preds <- rbind(HEX@data, HEX@data)
+HEX.preds <- data.frame(HEX.preds, time = rep(1:2, each = nrow(HEX@data)))
+
+
+HEX.preds <- data.frame(HEX.preds, 
+                        S.pred = predict(SAR.gbm, 
+                                         newdata = HEX.preds,
+                                         n.trees = NTREES, 
+                                         type = "response"))
+
+HEX.preds.wide <- reshape(data = HEX.preds,
+                           idvar = "id",
+                           v.names = "S.pred",
+                           timevar = "time",
+                           direction = "wide") %>% select(id, 
+                                                          S.pred.2, 
+                                                          S.pred.1)
+
+HEX.preds.wide <- data.frame(HEX.preds.wide, 
+                             S.delta.SAR = HEX.preds.wide$S.pred.2 -
+                                           HEX.preds.wide$S.pred.1,
+                             LR.SAR = log10(HEX.preds.wide$S.pred.2 /
+                                            HEX.preds.wide$S.pred.1))
+
+
+HEX.pred <- HEX
+HEX.pred@data <- left_join(x = HEX.pred@data,
+                           y = HEX.preds.wide,
+                           by = "id")
+
+# replace Inf values of log ratios by NAs
+HEX.pred@data$LR[HEX.pred@data$LR == Inf] <- NA 
+HEX.pred@data$LR.SAR[HEX.pred@data$LR.SAR == Inf] <- NA 
+
+# Pearson correlations of observed vs predicted
+delta.cor.hex.sar <- round(cor(HEX.pred@data$S.delta, 
+                               HEX.pred@data$S.delta.SAR, 
+                               use = "complete.obs"), 3)
+delta.cor.hex.sar
+
+LR.cor.hex.sar <- round(cor(HEX.pred@data$LR, 
+                            HEX.pred@data$LR.SAR, 
+                            use = "complete.obs"), 3)
+LR.cor.hex.sar
+```
+
+## Plot predicted vs observed in hexagons (SAR method)
+
+```{r, fig.width = 10, fig.height = 5, warning=FALSE, message=FALSE}
+SAR.obspred.HEX.S <- ggplot(data = HEX.pred@data, aes(x = S.delta, y = S.delta.SAR)) +
+  geom_point(colour="#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlim(-60,16) + ylim(-60,16) +
+  xlab(TeX(r'($\True \; \hat{S}_{\Delta}$)')) + 
+  ylab(TeX(r'($\Predicted \; \hat{S}_{\Delta}$)')) +  
+  labs(subtitle = paste("Pearson cor. = ", delta.cor.hex.sar)) +
+  theme_bw() 
+
+SAR.obspred.HEX.LR <- ggplot(data = HEX.pred@data, aes(x = LR, y = LR.SAR)) +
+  geom_point(colour="#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlab("True LR") + ylab("Predicted LR") + 
+  labs(subtitle = paste("Pearson cor. = ", LR.cor.hex.sar)) +
+  theme_bw() 
+
+grid.arrange(SAR.obspred.HEX.S, SAR.obspred.HEX.LR, nrow=1, ncol=2)
+```
+
+# Interpolation using the OAR method
+
+## Fit boosted trees
+
+Beware: This may take a couple of minutes.
+
+```{r}
+NTREES <- 1000
+
+OAR.gbm <- gbm(occ ~ Lon + Lat + Area.km + time + species, 
+               data = CNTR.sub.OAR, 
+               interaction.depth = 10, 
+               distribution = "bernoulli",
+               n.minobsinnode = 3,
+               n.trees = NTREES)
+```
+
+## Predict to countries (OAR method)
+
+```{r}
+CNTR.forpred.1 <- CNTR.forpred.OAR[CNTR.forpred.OAR$time == 1, ]
+CNTR.forpred.2 <- CNTR.forpred.OAR[CNTR.forpred.OAR$time == 2, ]
+
+P1 <- predict(OAR.gbm, 
+              newdata = CNTR.forpred.1, 
+              type = "response",
+              n.trees = NTREES)
+P2 <- predict(OAR.gbm, 
+              newdata = CNTR.forpred.2, 
+              type = "response",
+              n.trees = NTREES)
+P.ext = P1 * (1-P2) # probability of extinction
+P.gain = P2 * (1-P1) # probability of gain
+
+T.all <- data.frame(P.ext, P.gain, P1, P2, CNTR.forpred.1)
+
+preds <- ddply(.data = T.all, 
+                 .variables=c("LEVEL3_NAM"),
+                 .fun=summarize,
+                 est.S1 = sum(P1),
+                 est.S2 = sum(P2),
+                 est.Gain = sum(P.gain),
+                 est.Loss =  - sum(P.ext),
+                 S.delta.OAR = est.Gain + est.Loss,
+                 LR.OAR = log10(sum(P2)/sum(P1)))
+
+CNTR.pred2 <- CNTR.pred
+CNTR.pred2@data <- left_join(x = CNTR.pred2@data,
+                            y = preds,
+                            by = "LEVEL3_NAM")
+
+# replace Inf values of log ratios by NAs
+CNTR.pred2@data$LR[CNTR.pred2@data$LR == Inf] <- NA 
+CNTR.pred2@data$LR.SAR[CNTR.pred2@data$LR.SAR == Inf] <- NA 
+
+# Pearson correlations of observed vs predicted
+delta.cor.cntr.oar <- round(cor(CNTR.pred2@data$S.delta, 
+                                CNTR.pred2@data$S.delta.OAR, 
+                                use = "complete.obs"), 3)
+delta.cor.cntr.oar
+
+LR.cor.cntr.oar <- round(cor(CNTR.pred2@data$LR, 
+                             CNTR.pred2@data$LR.OAR, 
+                             use = "complete.obs"), 3)
+LR.cor.cntr.oar
+```
+
+## Plot predicted vs observed in countries (OAR method)
+
+```{r, fig.width = 10, fig.height=5, warning=FALSE, message=FALSE}
+OAR.obspred.CNTR.S <- ggplot(data = CNTR.pred2@data, 
+                      aes(x = S.delta, y = S.delta.OAR)) +
+  geom_point(colour = "#377eb8", shape = 1) + 
+  geom_point(aes(x = S.gain, y = est.Gain), colour = "#4daf4a", shape = 1) +
+  geom_point(aes(x = S.loss, y = est.Loss), colour = "#e41a1c", shape = 1) +
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlim(-60,16) + ylim(-60,16) +
+  labs(subtitle = paste("Pearson cor. = ", delta.cor.cntr.oar)) +
+  xlab("True") + ylab("Predicted") + theme_bw()
+
+OAR.obspred.CNTR.LR <- ggplot(data = CNTR.pred2@data, 
+                      aes(x = LR, y = LR.OAR)) +
+  geom_point(colour = "#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  labs(subtitle = paste("Pearson cor. = ", LR.cor.cntr.oar)) +
+  xlab("True LR") + ylab("Predicted LR") + theme_bw()
+
+grid.arrange(OAR.obspred.CNTR.S, OAR.obspred.CNTR.LR, nrow=1, ncol=2)
+```
+
+## Predict to hexagons (OAR method)
+
+```{r, warning=FALSE, message=FALSE}
+HEX.forpred.1 <- HEX.forpred.OAR[HEX.forpred.OAR$time == 1, ]
+HEX.forpred.2 <- HEX.forpred.OAR[HEX.forpred.OAR$time == 2, ]
+
+P1 <- predict(OAR.gbm, 
+              newdata = HEX.forpred.1, 
+              type = "response",
+              n.trees = NTREES)
+P2 <- predict(OAR.gbm, 
+              newdata = HEX.forpred.2, 
+              type = "response",
+              n.trees = NTREES)
+P.ext = P1 * (1-P2) # probability of extinction
+P.gain = P2 * (1-P1) # probability of gain
+
+T.all <- data.frame(P.ext, P.gain, P1, P2, HEX.forpred.1)
+
+
+preds <- ddply(.data = T.all, 
+                 .variables=c("id"),
+                 .fun=summarize,
+                 est.S1 = sum(P1),
+                 est.S2 = sum(P2),
+                 est.Gain = sum(P.gain),
+                 est.Loss =  - sum(P.ext),
+                 S.delta.OAR = est.Gain + est.Loss,
+                 LR.OAR = log10(sum(P2)/sum(P1)))
+
+HEX.pred2 <- HEX.pred
+HEX.pred2@data <- left_join(x = HEX.pred2@data,
+                            y = preds,
+                            by = "id")
+
+# replace Inf values of log ratios by NAs
+HEX.pred2@data$LR[HEX.pred2@data$LR == Inf] <- NA 
+HEX.pred2@data$LR.SAR[HEX.pred2@data$LR.SAR == Inf] <- NA 
+
+# Pearson correlations of observed vs predicted
+delta.cor.hex.oar <- round(cor(HEX.pred2@data$S.delta, 
+                               HEX.pred2@data$S.delta.OAR, 
+                               use = "complete.obs"), 3)
+delta.cor.hex.oar
+
+LR.cor.hex.oar <- round(cor(HEX.pred2@data$LR, 
+                            HEX.pred2@data$LR.OAR, 
+                            use = "complete.obs"), 3)
+LR.cor.hex.oar
+```
+
+## Plot predicted vs observed in hexagons (OAR method)
+
+```{r, warning=FALSE, message=FALSE, fig.width=10, fig.height=5}
+OAR.obspred.HEX.S <- ggplot(data = HEX.pred2@data, 
+                      aes(x = S.delta, y = S.delta.OAR)) +
+  geom_point(colour = "#377eb8", shape = 1) + 
+  geom_point(aes(x = S.gain, y = est.Gain), colour = "#4daf4a", shape = 1) +
+  geom_point(aes(x = S.loss, y = est.Loss), colour = "#e41a1c", shape = 1) +
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + 
+  coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  xlim(-60,16) + ylim(-60,16) +
+  labs(subtitle = paste("Pearson cor. = ", delta.cor.hex.oar)) +
+  xlab("True") + ylab("Predicted") + theme_bw() 
+
+OAR.obspred.HEX.LR <- ggplot(data = HEX.pred2@data, 
+                      aes(x = LR, y = LR.OAR)) +
+  geom_point(colour = "#377eb8", shape = 1) + 
+  geom_abline(intercept=0, slope=1) + 
+  theme(aspect.ratio=1) + coord_fixed() +
+  geom_hline(yintercept=0, linetype =2) +
+  geom_vline(xintercept=0, linetype =2) +
+  labs(subtitle = paste("Pearson cor. = ", LR.cor.hex.oar)) +
+  xlab("True") + ylab("Predicted") + theme_bw()
+
+grid.arrange(OAR.obspred.HEX.S, OAR.obspred.HEX.LR, nrow=1, ncol=2)
+```
+
+# Mapping predictions 
+
+## Predictions in countries
+
+```{r, warning=FALSE, message=FALSE}
+CNTR.pred2.fort <-  fortify(CNTR.pred2, region = "LEVEL3_NAM") %>%
+              left_join(y = CNTR.pred2@data, by = c("id" = "LEVEL3_NAM"))
+
+pCNTR.SAR <- ggplot(CNTR.pred2.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta.SAR)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() +
+             scale_fill_viridis(option = "magma", limits = lims.delta) 
+
+pCNTR.OAR <- ggplot(CNTR.pred2.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta.OAR)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + 
+             scale_fill_viridis(option = "magma",  limits = lims.delta) 
+```
+
+## Predictions in hexagons
+
+```{r}
+HEX.pred2.fort <-  fortify(HEX.pred2, region = "id") %>%
+              left_join(y = HEX.pred2@data, by = "id")
+
+pHEX.SAR <- ggplot(HEX.pred2.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta.SAR)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() +
+             scale_fill_viridis(option = "magma", limits = lims.delta) 
+pHEX.OAR <- ggplot(HEX.pred2.fort, aes(long, lat, group = group)) + 
+             geom_polygon(aes(fill = S.delta.OAR)) + blank.theme +
+             geom_polygon(data = LAND.fort,  aes(long, lat, group = group), 
+                          fill = NA, colour = "black") +
+             coord_fixed() + 
+             scale_fill_viridis(option = "magma", limits = lims.delta) 
+```
+
+## Plotting prediction maps
+
+```{r, fig.width = 10, fig.height = 12}
+lay.mat <- matrix(c(NA, 1, 1,NA,
+                    8, 8, 9, 9,
+                    2 , 2, 3, 3,
+                    4,  4, 5, 5,
+                    6, 6, 7, 7), nrow = 5, ncol = 4, byrow=TRUE)
+wd <- c(1,1,1,1)
+hg <- c(1,0.2,1,1, 1)
+
+grid.arrange(pCNTR.smp + labs(title="(a)", fill = "Available at:", 
+                              subtitle="Incomplete data used for all predictions"),
+             pCNTR.SAR + labs(title="(b)", subtitle="Predictions, SAR method"),
+             pHEX.SAR + labs(title="(c)", subtitle="Predictions, SAR method"),
+             pCNTR.OAR + labs(title="(d)", subtitle="Predictions, OAR method"),
+             pHEX.OAR + labs(title="(e)",  subtitle="Predictions, OAR method"),
+             pCNTR.de + labs(title="(f)",  subtitle="Observed") + 
+                        theme(legend.title = element_blank()),
+             pHEX.de + labs(title="(g)",   subtitle="Observed")+ 
+                        theme(legend.title = element_blank()),
+             text_grob("S change in countries", face = "bold"),
+             text_grob("S change in hexagons", face = "bold"),
+             layout_matrix = lay.mat,
+             widths = wd,
+             heights = hg)
+```
+
+# Final plots
+
+## Observed vs predicted for the main text
+
+```{r, fig.width = 8, fig.height = 4}
+obspred.bestof <- grid.arrange(#SAR.obspred.CNTR.S + 
+                               #labs(title="(a) Countries, SAR method"), 
+                               #OAR.obspred.CNTR.S + 
+                               #labs(title="(b) Countries, OAR method"),
+                               SAR.obspred.HEX.S + 
+                               labs(title="(a) SAR method"), 
+                               OAR.obspred.HEX.S + 
+                               labs(title="(b) OAR method"), 
+                               nrow=1, ncol=2)
+```
+
+Export as a png:
+
+```{r}
+ggsave("mammals_predicted_vs_true.pdf", obspred.bestof, height = 4, width = 8)
+```
+
+
+## Maps for the main text
+
+```{r, warning=FALSE, message=FALSE}
+maps.bestof <- grid.arrange(pCNTR.smp + labs(title="(a)", fill = "Available at:", 
+                              subtitle="Incomplete data used for all predictions"),
+             
+             pHEX.de + labs(title="(b)",   
+                            subtitle=TeX(r'($\True \; \hat{S}_{\Delta}$)')) + 
+             theme(legend.title = element_blank()),
+             
+             pHEX.SAR + labs(title="(c)", 
+             subtitle=TeX(r'($\Predicted \; \hat{S}_{\Delta} \; from  \; SAR  \; method$)'))+ 
+                        theme(legend.title = element_blank()),
+             
+             pHEX.OAR + labs(title="(d)",  
+             subtitle=TeX(r'($\Predicted \; \hat{S}_{\Delta}  \; from \; OAR  \; method$)'))+ 
+                        theme(legend.title = element_blank()),
+             nrow = 2, ncol = 2)
+```
+
+Export as a png:
+
+```{r}
+ggsave("mammals_prediction_maps.pdf", maps.bestof, height = 6, width = 10)
+```
+
+
+

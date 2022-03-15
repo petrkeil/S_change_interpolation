@@ -1,0 +1,223 @@
+---
+title: "Empiciral analysis - European plants"
+author: "Petr Keil"
+date: "14/3/2022"
+output: 
+  html_document: 
+    toc: yes
+    highlight: pygments
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import libraries, data, and other objects
+
+## Librarires
+
+```{r, message = FALSE, warning = FALSE}
+library(dplyr)
+library(plyr)
+library(tidyverse)
+library(gbm)
+library(rworldmap)
+library(randomForest)
+library(viridis)
+library(broom)
+library(gridExtra)
+library(rgdal)
+library(raster)
+library(rgeos)
+library(sp)
+```
+
+# Data
+
+## Polygon and raster boundaries
+
+```{r, warning = FALSE}
+# WGS84 projection
+WGS84 <- "+proj=longlat +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +no_defs"
+# Albers conical equal area projection
+Albers <- "+proj=aea +lat_1=43 +lat_2=62 +lat_0=30 +lon_0=10 +x_0=0 +y_0=0 +ellps=intl +units=m +no_defs"
+
+# read the European boundary data for background plotting
+bg <- readOGR(dsn="Europe_boundary", layer="Europe_map")
+bg <- spTransform(bg, CRSobj=CRS(Albers))
+
+# simplified European boundary
+EU.simple <- readOGR(dsn="Europe_boundary", layer="simple_europe2")
+EU.simple@data <- dplyr::select(EU.simple@data, NAME, LON, LAT)
+proj4string(EU.simple) <- WGS84
+EU.simple <- spTransform(EU.simple, CRSobj=CRS(Albers))
+
+# raster for storing of the model predictions
+rst <- raster(bg, resolution = c(100000, 100000))
+# convert the raster to polygon grid layer
+pol <- rasterToPolygons(rst)
+```
+
+## Grid cell coordinates and areas
+
+```{r}
+# remove cells overlapping the sea
+good.cells <- (is.na(over(x=pol, y = bg)) == FALSE)[,1]
+pol <- pol[good.cells,]
+
+# calculate lat and lon coordinates, and area of each grid cell
+plot(pol); plot(bg, add=TRUE)
+latlon <- data.frame(coordinates(spTransform(pol, CRSobj=WGS84 )))
+names(latlon) <- c("Lon","Lat")
+Area <- gArea(pol, byid=TRUE)/1000000
+
+pol@data <- data.frame(latlon, Area, id = as.character(1:nrow(latlon)))
+```
+
+# Data on species richness
+
+```{r}
+# data from time 1
+plants1 <- read.csv("Europe_plants.csv") %>%
+           dplyr::select(Lon, Lat, NAME, Area, S = S1, S1=S1, S2=S2)
+# data from time 2
+plants2 <- read.csv("Europe_plants.csv") %>%
+           dplyr::select(Lon, Lat, NAME, Area, S = S2, S1=S1, S2=S2)
+
+# species richness in two time periods compared
+plot(plants1$S, plants2$S, xlab = "S1", ylab = "S2", 
+     main = "Species richness S in time 1 and 2")
+abline(a=0, b=1)
+
+# historgram of raw biodiverstiy change
+hist(plants2$S- plants1$S)
+
+plants <- rbind(plants1, plants2)
+plants <- data.frame(plants, Time = rep(c(1,2), each = nrow(plants1)))
+
+EU.simple@data <- left_join(EU.simple@data, plants1, by="NAME")
+
+# species-area relationships in the two time periods
+ggplot(data = plants, aes(x = Area, y = S)) +
+  geom_point(aes(colour = as.factor(Time))) + 
+  scale_y_log10() + 
+  scale_x_log10() + 
+  geom_smooth(aes(colour = as.factor(Time)), method = "lm", se=FALSE)
+```
+
+# Random forest - SAR method
+
+## Fitting the random forest
+
+```{r}
+RF.plants <- randomForest(S ~ Time + Area + Lat + Lon, 
+                 data = plants, 
+                 mtry = 3,
+                 nodesize = 5,
+                 sampsize = 40,
+                 n.trees = 1000)
+RF.plants$importance
+varImpPlot(RF.plants, type = 2)
+```
+
+## Making predictions to the grid
+
+```{r}
+# data frame that will be used for the predictions
+plants2 <- data.frame(plants, 
+                      S.pred.RF = predict(RF.plants, 
+                                          type = "response"))
+
+# predictions in time 1
+S1pred <- predict(RF.plants, 
+                  newdata = data.frame(pol@data, Time = 1))
+
+# predictions in time 2
+S2pred <- predict(RF.plants, 
+                  newdata = data.frame(pol@data, Time = 2))
+```
+
+## Log ratios
+
+```{r}
+  delta <- S2pred-S1pred
+  logratio <- log10(S2pred/S1pred)
+
+  pol2 <- pol
+  pol2@data <- data.frame(pol2@data, delta, logratio) 
+  
+  pol.gg <- fortify(pol2, region = "id")
+  pol.gg <- left_join(pol.gg, pol2@data, by="id")
+  bf.gg <- fortify(bg)
+```
+
+# Maps
+
+## Map of raw data from Essl et al. 2013
+
+```{r}
+EU.fort <- fortify(EU.simple, region="NAME")
+EU.fort <- left_join(EU.fort, EU.simple@data, by=c("id" ="NAME"))
+
+map.1 <- ggplot(data = EU.fort, aes(long, lat, group=group)) + 
+         geom_polygon(data = bf.gg, fill = "grey", colour = "grey") +
+         geom_polygon(aes(fill = log10(S2/S1)), colour = "grey") +
+         scale_fill_viridis(option = "plasma", limits = c(0,0.25)) +#,  
+                            #trans="log10",
+                            #limits = c(1, 2000)) + 
+  labs(fill = expression(log[10](S[2]/S[1]))) +
+           ggtitle("(a)") +
+         theme_bw() + theme(axis.line=element_blank(),axis.text.x=element_blank(),
+                            axis.text.y=element_blank(),axis.ticks=element_blank(),
+                            axis.title.x=element_blank(),
+                            axis.title.y=element_blank(),
+                            legend.position=c(0.9, 0.8),
+                            #legend.title = "S",
+                            plot.title = element_text(face=quote(bold)),
+                            panel.background=element_blank(),
+                            panel.border=element_blank(),panel.grid.major=element_blank(),
+                            panel.grid.minor=element_blank(),plot.background=element_blank())
+
+```
+
+## Map of predictions
+
+```{r}
+map.2 <-ggplot(data = pol.gg, aes(long, lat, group=group)) + 
+        geom_polygon(aes(fill = logratio)) +
+        geom_polygon(data = bf.gg, fill = NA, colour = "grey") +
+        scale_fill_viridis(option = "plasma", limits = c(0,0.25)) +#, 
+                           #trans="log10", 
+                           #limits=c(1, 2000)) + 
+        #labs(fill = "S2-S1")+  
+        labs(fill = expression(log[10](S[2]/S[1]))) +
+         ggtitle("(b)") +
+        theme_bw() + theme(axis.line=element_blank(),axis.text.x=element_blank(),
+                           axis.text.y=element_blank(),axis.ticks=element_blank(),
+                            axis.title.x=element_blank(),
+                            axis.title.y=element_blank(),
+                            legend.position=c(0.9, 0.8),
+                            plot.title = element_text(face=quote(bold)),
+                            panel.background=element_blank(),
+                            panel.border=element_blank(),panel.grid.major=element_blank(),
+                            panel.grid.minor=element_blank(),plot.background=element_blank())
+```
+
+## Export maps
+
+```{r, fig.width = 10, fig.height = 6}
+png("eu_maps.png", res=150, width=1200, height=700)
+grid.arrange(map.1, map.2 , nrow=1, ncol=2)
+dev.off()
+
+grid.arrange(map.1 + ggtitle("(a)"), map.2 + ggtitle("(b)"), nrow=1, ncol=2)
+```
+
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
