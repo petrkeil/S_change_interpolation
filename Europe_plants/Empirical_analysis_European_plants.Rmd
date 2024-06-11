@@ -1,7 +1,7 @@
 ---
 title: "Empiciral analysis - European plants"
 author: "Petr Keil"
-date: "14/3/2022"
+date: "27/09/2022"
 output: 
   html_document: 
     toc: yes
@@ -35,11 +35,12 @@ library(sp)
 
 # Data
 
-## Polygon and raster boundaries
+## Import polygons and raster boundaries
 
 ```{r, warning = FALSE}
 # WGS84 projection
 WGS84 <- "+proj=longlat +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +no_defs"
+
 # Albers conical equal area projection
 Albers <- "+proj=aea +lat_1=43 +lat_2=62 +lat_0=30 +lon_0=10 +x_0=0 +y_0=0 +ellps=intl +units=m +no_defs"
 
@@ -55,6 +56,7 @@ EU.simple <- spTransform(EU.simple, CRSobj=CRS(Albers))
 
 # raster for storing of the model predictions
 rst <- raster(bg, resolution = c(100000, 100000))
+
 # convert the raster to polygon grid layer
 pol <- rasterToPolygons(rst)
 ```
@@ -77,6 +79,8 @@ pol@data <- data.frame(latlon, Area, id = as.character(1:nrow(latlon)))
 
 # Data on species richness
 
+Loading the data:
+
 ```{r}
 # data from time 1
 plants1 <- read.csv("Europe_plants.csv") %>%
@@ -84,7 +88,11 @@ plants1 <- read.csv("Europe_plants.csv") %>%
 # data from time 2
 plants2 <- read.csv("Europe_plants.csv") %>%
            dplyr::select(Lon, Lat, NAME, Area, S = S2, S1=S1, S2=S2)
+```
 
+Some simple visual explorations of the raw data
+
+```{r}
 # species richness in two time periods compared
 plot(plants1$S, plants2$S, xlab = "S1", ylab = "S2", 
      main = "Species richness S in time 1 and 2")
@@ -111,14 +119,25 @@ ggplot(data = plants, aes(x = Area, y = S)) +
 ## Fitting the random forest
 
 ```{r}
+# fit the random forest
 RF.plants <- randomForest(S ~ Time + Area + Lat + Lon, 
-                 data = plants, 
-                 mtry = 3,
-                 nodesize = 5,
-                 sampsize = 40,
-                 n.trees = 1000)
-RF.plants$importance
-varImpPlot(RF.plants, type = 2)
+                          data = plants, 
+                          mtry = 3,
+                          nodesize = 5,
+                          sampsize = 40,
+                          n.trees = 1000)
+
+RF.plants
+
+imp <- data.frame(Importance = importance(RF.plants)[,1], 
+                  Predictor = row.names(importance(RF.plants)))
+imp.plot <- ggplot(data = imp, aes(x=Importance, y=Predictor)) + 
+                   geom_bar(stat = "identity") + 
+                   #theme_minimal() + 
+                   ggtitle("(b)") +
+                   theme(plot.title = element_text(face=quote(bold)))
+imp.plot
+                   
 ```
 
 ## Making predictions to the grid
@@ -138,7 +157,7 @@ S2pred <- predict(RF.plants,
                   newdata = data.frame(pol@data, Time = 2))
 ```
 
-## Log ratios
+## Log ratios and absolute difference
 
 ```{r}
   delta <- S2pred-S1pred
@@ -157,12 +176,14 @@ S2pred <- predict(RF.plants,
 ## Map of raw data from Essl et al. 2013
 
 ```{r}
+thickness = 0.3
+
 EU.fort <- fortify(EU.simple, region="NAME")
 EU.fort <- left_join(EU.fort, EU.simple@data, by=c("id" ="NAME"))
 
 map.1 <- ggplot(data = EU.fort, aes(long, lat, group=group)) + 
          geom_polygon(data = bf.gg, fill = "grey", colour = "grey") +
-         geom_polygon(aes(fill = log10(S2/S1)), colour = "grey") +
+         geom_polygon(aes(fill = log10(S2/S1)), colour = "black", size=thickness) +
          scale_fill_viridis(option = "plasma", limits = c(0,0.25)) +#,  
                             #trans="log10",
                             #limits = c(1, 2000)) + 
@@ -178,7 +199,7 @@ map.1 <- ggplot(data = EU.fort, aes(long, lat, group=group)) +
                             panel.background=element_blank(),
                             panel.border=element_blank(),panel.grid.major=element_blank(),
                             panel.grid.minor=element_blank(),plot.background=element_blank())
-
+map.1
 ```
 
 ## Map of predictions
@@ -186,13 +207,13 @@ map.1 <- ggplot(data = EU.fort, aes(long, lat, group=group)) +
 ```{r}
 map.2 <-ggplot(data = pol.gg, aes(long, lat, group=group)) + 
         geom_polygon(aes(fill = logratio)) +
-        geom_polygon(data = bf.gg, fill = NA, colour = "grey") +
+        geom_polygon(data = bf.gg, fill = NA, colour = "black", size=thickness) +
         scale_fill_viridis(option = "plasma", limits = c(0,0.25)) +#, 
                            #trans="log10", 
                            #limits=c(1, 2000)) + 
         #labs(fill = "S2-S1")+  
         labs(fill = expression(log[10](S[2]/S[1]))) +
-         ggtitle("(b)") +
+         ggtitle("(c)") +
         theme_bw() + theme(axis.line=element_blank(),axis.text.x=element_blank(),
                            axis.text.y=element_blank(),axis.ticks=element_blank(),
                             axis.title.x=element_blank(),
@@ -202,18 +223,42 @@ map.2 <-ggplot(data = pol.gg, aes(long, lat, group=group)) +
                             panel.background=element_blank(),
                             panel.border=element_blank(),panel.grid.major=element_blank(),
                             panel.grid.minor=element_blank(),plot.background=element_blank())
+map.2
+```
+
+```{r}
+map.3 <-ggplot(data = pol.gg, aes(long, lat, group=group)) + 
+        geom_polygon(aes(fill = delta)) +
+        geom_polygon(data = bf.gg, fill = NA, colour = "black", size=thickness) +
+        scale_fill_viridis(option = "viridis") +#, 
+                           #trans="log10", 
+                           #limits=c(1, 2000)) + 
+        #labs(fill = "S2-S1")+  
+        labs(fill = expression(S[2]-S[1])) +
+         ggtitle("(d)") +
+        theme_bw() + theme(axis.line=element_blank(),axis.text.x=element_blank(),
+                           axis.text.y=element_blank(),axis.ticks=element_blank(),
+                            axis.title.x=element_blank(),
+                            axis.title.y=element_blank(),
+                            legend.position=c(0.9, 0.8),
+                            plot.title = element_text(face=quote(bold)),
+                            panel.background=element_blank(),
+                            panel.border=element_blank(),panel.grid.major=element_blank(),
+                            panel.grid.minor=element_blank(),plot.background=element_blank())
+map.3
 ```
 
 ## Export maps
 
 ```{r, fig.width = 10, fig.height = 6}
-png("eu_maps.png", res=150, width=1200, height=700)
-grid.arrange(map.1, map.2 , nrow=1, ncol=2)
+png("eu_maps.png", res=140, width=1200, height=1200)
+grid.arrange(map.1, imp.plot, map.2, map.3, nrow=2, ncol=2)
 dev.off()
 
-grid.arrange(map.1 + ggtitle("(a)"), map.2 + ggtitle("(b)"), nrow=1, ncol=2)
+pdf("eu_maps.pdf", width=8, height=8)
+grid.arrange(map.1, imp.plot, map.2, map.3, nrow=2, ncol=2)
+dev.off()
 ```
-
 
 ## Session info
 

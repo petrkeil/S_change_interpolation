@@ -76,8 +76,8 @@ predict.SAR.mean <- function(SAR.model,
 # ------------------------------------------------------------------------------
 
 predict.OAR.mean <- function(model.OAR, 
-                           grains = c(32, 16, 8, 4), 
-                           area.span = NULL)
+                             grains = c(32, 16, 8, 4), 
+                             area.span = NULL)
 {
   GRID <- prepare.grid(grains, area.span)
   GRID <- data.frame(GRID, Cell = 1:nrow(GRID))

@@ -1,4 +1,4 @@
-# Functions for simulation and machine learning-based analysis of biodiversity
+# Description: Functions for simulation of biodiversity
 # change in spatially misaligned polygons.
 
 # Author: Petr Keil 
